@@ -71,7 +71,6 @@ Before you begin, ensure you have the following installed and running on your sy
 ---
 
 ## Project Structure
-
 .
 ├── dags/
 │   ├── stock_dag.py             # Airflow DAG definition
