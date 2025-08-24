@@ -1,11 +1,10 @@
-# docker-compose.yml (The Ultimate Final Version)
+# docker-compose.yml (The One True Final Version)
 version: '3.8'
 
 services:
   airflow:
-    # This tells Docker to build the image from the Dockerfile in this directory
     build: .
-    container_name: airflow_final
+    container_name: airflow_is_working
     environment:
       # Airflow Core Configuration (uses SQLite)
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
@@ -17,12 +16,13 @@ services:
       
       # This is for YOUR custom script to use
       - DATABASE_URL=postgresql+psycopg2://stocks:stocks_pw@host.docker.internal:5432/stockdb
-      - ALPHAVANTAGE_API_KEY=RB68472YOIWU13JK
-      - SYMBOLS=AAPL,MSFT,GOGL
+      
+      # Custom variables for your DAG
+      - SYMBOLS=AAPL,MSFT,GOOGL
       - SCHEDULE_CRON=0 * * * *
 
     volumes:
-      # Mount the dags folder (which now contains the scripts folder)
+      # Mount the dags folder (which contains the scripts folder)
       - ./dags:/opt/airflow/dags
       - ./logs:/opt/airflow/logs
       - airflow-db:/opt/airflow/

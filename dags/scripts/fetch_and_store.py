@@ -1,67 +1,21 @@
+# dags/scripts/fetch_and_store.py
 import os
 import time
 import logging
 from typing import Dict, List, Iterable
-import requests
+import yfinance as yf # <-- NEW: Import yfinance
 from sqlalchemy import create_engine, text
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
+# --- NEW DEBUGGING LINE ADDED HERE ---
+log.warning("--- SCRIPT VERSION 3.0 (Yahoo Finance) IS RUNNING ---")
+
 DATABASE_URL = os.environ["DATABASE_URL"]
-ALPHA_URL = "https://www.alphavantage.co/query"
+# ALPHA_URL has been removed as it's no longer needed
 
-def _request_with_retries(params: Dict[str, str], retries: int = 5, backoff: float = 1.5) -> Dict:
-    for attempt in range(1, retries + 1):
-        try:
-            resp = requests.get(ALPHA_URL, params=params, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            if "Note" in data:
-                raise RuntimeError(f"API limit/throttle: {data['Note']}")
-            if "Error Message" in data:
-                raise RuntimeError(data["Error Message"])
-            return data
-        except Exception as e:
-            wait = backoff ** attempt
-            log.warning("Attempt %s/%s failed: %s — retrying in %.1fs", attempt, retries, e, wait)
-            if attempt == retries:
-                raise
-            time.sleep(wait)
-
-def fetch_daily_adjusted(symbol: str, api_key: str) -> List[Dict]:
-    params = {
-        "function": "TIME_SERIES_DAILY_ADJUSTED",
-        "symbol": symbol,
-        "apikey": api_key,
-        "outputsize": "compact",
-        "datatype": "json",
-    }
-    payload = _request_with_retries(params)
-    
-    # --- NEW DEBUGGING LINE ADDED HERE ---
-    log.info("RAW API RESPONSE for %s: %s", symbol, payload)
-
-    ts_key = next((k for k in payload.keys() if k.lower().startswith("time series")), None)
-    if not ts_key or ts_key not in payload:
-        raise ValueError(f"Unexpected response structure for {symbol}")
-    series = payload[ts_key]
-    rows: List[Dict] = []
-    for date_str, vals in series.items():
-        try:
-            rows.append({
-                "symbol": symbol,
-                "ts": date_str,
-                "open": float(vals.get("1. open") or 0.0),
-                "high": float(vals.get("2. high") or 0.0),
-                "low": float(vals.get("3. low") or 0.0),
-                "close": float(vals.get("4. close") or 0.0),
-                "volume": int(vals.get("6. volume") or 0),
-            })
-        except Exception as e:
-            log.warning("Skipping malformed row for %s on %s: %s", symbol, date_str, e)
-    return rows
-
+# We are keeping this function the same
 def upsert_rows(rows: Iterable[Dict]) -> int:
     if not rows:
         return 0
@@ -86,15 +40,44 @@ def upsert_rows(rows: Iterable[Dict]) -> int:
                 log.error("Upsert failed for %s %s: %s", row.get("symbol"), row.get("ts"), e)
     return len(list(rows))
 
+
+# --- THIS FUNCTION HAS BEEN COMPLETELY REWRITTEN FOR YFINANCE ---
+def fetch_daily_data(symbol: str) -> List[Dict]:
+    log.info("Fetching data for %s from Yahoo Finance", symbol)
+    ticker = yf.Ticker(symbol)
+    # Get historical market data for the last month
+    hist_df = ticker.history(period="1mo")
+
+    if hist_df.empty:
+        log.warning("No data found for symbol %s", symbol)
+        return []
+
+    rows: List[Dict] = []
+    # Loop through the DataFrame rows
+    for date, row_data in hist_df.iterrows():
+        rows.append({
+            "symbol": symbol,
+            "ts": date.strftime('%Y-%m-%d'), # Format date correctly
+            "open": float(row_data["Open"]),
+            "high": float(row_data["High"]),
+            "low": float(row_data["Low"]),
+            "close": float(row_data["Close"]),
+            "volume": int(row_data["Volume"]),
+        })
+    return rows
+
+
+# --- THIS FUNCTION HAS BEEN UPDATED TO CALL THE NEW FETCH FUNCTION ---
 def run_once(symbols: List[str]):
-    api_key = os.environ["ALPHAVANTAGE_API_KEY"]
+    # No API key needed for yfinance
     for sym in symbols:
         try:
-            log.info("Fetching %s", sym)
-            rows = fetch_daily_adjusted(sym, api_key)
+            log.info("Processing symbol: %s", sym)
+            rows = fetch_daily_data(sym)
             log.info("For symbol %s, found %d rows of data from API.", sym, len(rows))
-            count = upsert_rows(rows)
-            log.info("%s: upserted %s rows", sym, count)
+            if rows:
+                count = upsert_rows(rows)
+                log.info("%s: upserted %s rows", sym, count)
         except Exception as e:
             log.exception("Symbol %s failed: %s", sym, e)
 
