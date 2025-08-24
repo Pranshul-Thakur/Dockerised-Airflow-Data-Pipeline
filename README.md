@@ -86,30 +86,30 @@ Follow these steps to set up and run the pipeline.
 
 Before launching, you must manually create the database, user, and table for the stock data. Connect to your local PostgreSQL instance as a superuser and run the following SQL commands:
 
-SQL
-
--- Create the user and database
+```sql
+-- Create user and database
 CREATE USER stocks WITH PASSWORD 'stocks_pw';
 CREATE DATABASE stockdb;
 
--- Grant permissions
+-- Permissions
 GRANT ALL PRIVILEGES ON DATABASE stockdb TO stocks;
 
--- Connect to the new database (\c stockdb) before running the next commands
+-- Switch to stockdb before this part (\c stockdb)
 CREATE TABLE IF NOT EXISTS stock_prices (
-  symbol      TEXT        NOT NULL,
-  ts          DATE        NOT NULL,
-  open        NUMERIC,
-  high        NUMERIC,
-  low         NUMERIC,
-  close       NUMERIC,
-  volume      BIGINT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (symbol, ts)
+    symbol TEXT NOT NULL,
+    ts DATE NOT NULL,
+    open NUMERIC,
+    high NUMERIC,
+    low NUMERIC,
+    close NUMERIC,
+    volume BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (symbol, ts)
 );
 
 GRANT ALL PRIVILEGES ON TABLE stock_prices TO stocks;
+
 2. Configure PostgreSQL Network Access
 
 Ensure your PostgreSQL server will accept connections from Docker. Add the following line to your pg_hba.conf file and restart your PostgreSQL service.
