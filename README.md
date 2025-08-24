@@ -153,7 +153,7 @@ docker-compose up -d
 ## Verification Screenshots
 
 ### Airflow UI - DAG Running Successfully
-![Airflow DAG Status](images/airflow_ui.png)
+![Airflow DAG Status](images/1.png)
 
 ### Database Results - Stock Data Stored
-![Database Query Results](images/database_results.png)
+![Database Query Results](images/2.png)
