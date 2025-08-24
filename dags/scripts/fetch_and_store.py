@@ -1,4 +1,3 @@
-# dags/scripts/fetch_and_store.py
 import os
 import time
 import logging
@@ -13,7 +12,6 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 ALPHA_URL = "https://www.alphavantage.co/query"
 
 def _request_with_retries(params: Dict[str, str], retries: int = 5, backoff: float = 1.5) -> Dict:
-    # ... (the rest of your function is fine)
     for attempt in range(1, retries + 1):
         try:
             resp = requests.get(ALPHA_URL, params=params, timeout=30)
@@ -32,7 +30,6 @@ def _request_with_retries(params: Dict[str, str], retries: int = 5, backoff: flo
             time.sleep(wait)
 
 def fetch_daily_adjusted(symbol: str, api_key: str) -> List[Dict]:
-    # ... (this function is fine)
     params = {
         "function": "TIME_SERIES_DAILY_ADJUSTED",
         "symbol": symbol,
@@ -41,6 +38,10 @@ def fetch_daily_adjusted(symbol: str, api_key: str) -> List[Dict]:
         "datatype": "json",
     }
     payload = _request_with_retries(params)
+    
+    # --- NEW DEBUGGING LINE ADDED HERE ---
+    log.info("RAW API RESPONSE for %s: %s", symbol, payload)
+
     ts_key = next((k for k in payload.keys() if k.lower().startswith("time series")), None)
     if not ts_key or ts_key not in payload:
         raise ValueError(f"Unexpected response structure for {symbol}")
@@ -62,7 +63,6 @@ def fetch_daily_adjusted(symbol: str, api_key: str) -> List[Dict]:
     return rows
 
 def upsert_rows(rows: Iterable[Dict]) -> int:
-    # ... (this function is fine)
     if not rows:
         return 0
     engine = create_engine(DATABASE_URL, future=True)
@@ -86,13 +86,13 @@ def upsert_rows(rows: Iterable[Dict]) -> int:
                 log.error("Upsert failed for %s %s: %s", row.get("symbol"), row.get("ts"), e)
     return len(list(rows))
 
-def run_once(symbols: List[str]): # <-- Use capital L here
-    # ... (this function is fine)
+def run_once(symbols: List[str]):
     api_key = os.environ["ALPHAVANTAGE_API_KEY"]
     for sym in symbols:
         try:
             log.info("Fetching %s", sym)
             rows = fetch_daily_adjusted(sym, api_key)
+            log.info("For symbol %s, found %d rows of data from API.", sym, len(rows))
             count = upsert_rows(rows)
             log.info("%s: upserted %s rows", sym, count)
         except Exception as e:

@@ -17,6 +17,9 @@ services:
       
       # This is for YOUR custom script to use
       - DATABASE_URL=postgresql+psycopg2://stocks:stocks_pw@host.docker.internal:5432/stockdb
+      - ALPHAVANTAGE_API_KEY=RB68472YOIWU13JK
+      - SYMBOLS=AAPL,MSFT,GOGL
+      - SCHEDULE_CRON=0 * * * *
 
     volumes:
       # Mount the dags folder (which now contains the scripts folder)
