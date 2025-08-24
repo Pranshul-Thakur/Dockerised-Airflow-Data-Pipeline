@@ -1,76 +1,77 @@
-## Dockerized Stock Data Pipeline with Airflow
+# Dockerized Stock Data Pipeline with Airflow
+
 This project implements a complete, containerized data pipeline that automatically fetches daily stock market data from the Yahoo Finance API, processes it, and stores it in a PostgreSQL database. The entire process is orchestrated by Apache Airflow and is fully containerized using Docker for easy, one-command deployment.
 
+---
 
 ## Features
- - Automated Data Fetching: Schedules hourly data ingestion from the free and reliable Yahoo Finance (yfinance) library.
 
- - Robust Orchestration: Uses Apache Airflow running in a resilient standalone mode for scheduling, monitoring, and execution.
+- **Automated Data Fetching**: Schedules hourly data ingestion from the free and reliable Yahoo Finance (yfinance) library.  
+- **Robust Orchestration**: Uses Apache Airflow running in a resilient standalone mode for scheduling, monitoring, and execution.  
+- **Persistent Data Storage**: Upserts data into an external PostgreSQL table, creating a historical record of daily stock prices.  
+- **Custom Containerized Environment**: Utilizes a custom Dockerfile to create a bespoke Airflow image with all necessary dependencies pre-installed, managed by Docker Compose for one-command deployment.  
+- **Resilient by Design**: Implements comprehensive error handling within the data fetching script and leverages Airflow's built-in retry mechanism.  
+- **Configurable**: Key parameters like stock symbols and the pipeline schedule are easily configured through environment variables in the `docker-compose.yml` file.  
 
- - Persistent Data Storage: Upserts data into an external PostgreSQL table, creating a historical record of daily stock prices.
-
- - Custom Containerized Environment: Utilizes a custom Dockerfile to create a bespoke Airflow image with all necessary dependencies pre-installed, managed by Docker Compose for one-command deployment.
-
- - Resilient by Design: Implements comprehensive error handling within the data fetching script and leverages Airflow's built-in retry mechanism.
-
- - Configurable: Key parameters like stock symbols and the pipeline schedule are easily configured through environment variables in the docker-compose.yml file.
+---
 
 ## Architectural Decisions and Troubleshooting Journey
+
 The final architecture of this project was the result of an iterative development process, several adaptions were made to the original design. The hurdles are mentioned below as followed:
 
- ### Phase 1: Initial Approach and Network Failure
-Initial Goal: To create a fully containerized environment with separate services for Airflow and PostgreSQL, using the official postgres Docker image.
+### Phase 1: Initial Approach and Network Failure
 
-Problem Encountered: A persistent, low-level network DNS error (no such host) prevented Docker from successfully pulling the postgres image from Docker Hub. Standard fixes (restarting Docker, changing host DNS, flushing cache) were unsuccessful, indicating a deep, stubborn issue with the host's Docker networking environment.
+- **Initial Goal**: To create a fully containerized environment with separate services for Airflow and PostgreSQL, using the official postgres Docker image.  
+- **Problem Encountered**: A persistent, low-level network DNS error (`no such host`) prevented Docker from successfully pulling the postgres image from Docker Hub. Standard fixes (restarting Docker, changing host DNS, flushing cache) were unsuccessful, indicating a deep, stubborn issue with the host's Docker networking environment.  
+- **Decision**: Rather than continue to debug a fundamental host environment issue, the architecture was pivoted to bypass the problem. I decided to use a PostgreSQL server already installed locally on the host machine, eliminating the need to pull the postgres image.  
 
-Decision: Rather than continue to debug a fundamental host environment issue, the architecture was pivoted to bypass the problem. I decided to use a PostgreSQL server already installed locally on the host machine, eliminating the need to pull the postgres image.
+---
 
 ### Phase 2: The Pivot to Local Postgres and the "Invisible" Error
-New Goal: Run the Airflow services in Docker and connect them to the local PostgreSQL database on the host machine.
 
-Implementation: The docker-compose.yml was modified to remove the postgres service, and the DATABASE_URL was configured to point to host.docker.internal.
+- **New Goal**: Run the Airflow services in Docker and connect them to the local PostgreSQL database on the host machine.  
+- **Implementation**: The `docker-compose.yml` was modified to remove the postgres service, and the `DATABASE_URL` was configured to point to `host.docker.internal`.  
+- **Problem Encountered**: A bizarre and highly persistent issue arose where the Airflow containers would not read any environment variables. This caused Airflow to repeatedly fall back to its default SQLite configuration, resulting in `KeyError` exceptions for missing variables and `AirflowConfigException` errors due to executor incompatibility.  
 
-Problem Encountered: A bizarre and highly persistent issue arose where the Airflow containers would not read any environment variables. This caused Airflow to repeatedly fall back to its default SQLite configuration, resulting in KeyError exceptions for missing variables and AirflowConfigException errors due to executor incompatibility. I systematically ruled out:
+I systematically ruled out:
+  - Incorrect `.env` filename  
+  - Incorrect `.env` file location  
+  - Incorrect `.env` file encoding (by recreating the file from scratch)  
+  - A broken Docker installation (by performing a full, clean reinstallation)  
 
-Incorrect .env filename.
+- **Final Diagnosis**: The root cause was identified as invalid whitespace characters (non-breaking spaces) used for indentation in the `docker-compose.yml` file, likely introduced via copy-pasting. The YAML parser silently failed to read the misformatted configuration blocks, leading to the containers starting with no environment variables.  
 
-Incorrect .env file location.
-
-Incorrect .env file encoding (by recreating the file from scratch).
-
-A broken Docker installation (by performing a full, clean reinstallation).
-
-Final Diagnosis: The root cause was identified as invalid whitespace characters (non-breaking spaces) used for indentation in the docker-compose.yml file, likely introduced via copy-pasting. The YAML parser silently failed to read the misformatted configuration blocks, leading to the containers starting with no environment variables.
+---
 
 ### Phase 3: Final Architecture and Dependency Management
-New Goal: Create the most robust and simple configuration possible to eliminate any remaining environmental factors.
 
-Implementation:
+- **New Goal**: Create the most robust and simple configuration possible to eliminate any remaining environmental factors.  
+- **Implementation**:  
+  - I switched to the Airflow standalone command, which runs the scheduler, webserver, and worker in a single, resilient process ideal for local development.  
+  - The Airflow metadata backend was set to SQLite (managed internally by the standalone command) to simplify the core Airflow setup. The external PostgreSQL database was reserved solely for storing the final pipeline data, creating a clear separation of concerns.  
 
-I switched to the Airflow standalone command, which runs the scheduler, webserver, and worker in a single, resilient process ideal for local development.
+- **Problem Encountered**: With the system running, I encountered a series of classic Python dependency and code-level bugs:  
+  - **API Paywall**: The initial data source (Alpha Vantage) returned an error indicating its endpoint was now a premium feature.  
+  - **Data Source Pivot**: Switched the pipeline to use the yfinance library for Yahoo Finance data.  
+  - **Dependency Conflict**: The yfinance library installed a sub-dependency (`multitasking`) with a bug that used incompatible Python 3.9+ syntax in our Python 3.8 environment, causing a `TypeError`.  
 
-The Airflow metadata backend was set to SQLite (managed internally by the standalone command) to simplify the core Airflow setup. The external PostgreSQL database was reserved solely for storing the final pipeline data, creating a clear separation of concerns.
+- **Final Solution**: To definitively solve all dependency issues, a `Dockerfile` was created. This builds a custom Airflow image where all Python libraries (`yfinance`, `apache-airflow-providers-postgres`) are pre-installed, and the problematic multitasking library is pinned to a known-good version (`0.0.11`). This is the professional standard for creating reproducible and reliable containerized environments.  
 
-Problem Encountered: With the system running, I encountered a series of classic Python dependency and code-level bugs:
+This iterative process led to the final, robust architecture that successfully meets all project requirements.  
 
-API Paywall: The initial data source (Alpha Vantage) returned an error indicating its endpoint was now a premium feature.
-
-Data Source Pivot: Switched the pipeline to use the yfinance library for Yahoo Finance data.
-
-Dependency Conflict: The yfinance library installed a sub-dependency (multitasking) with a bug that used incompatible Python 3.9+ syntax in our Python 3.8 environment, causing a TypeError.
-
-Final Solution: To definitively solve all dependency issues, a Dockerfile was created. This builds a custom Airflow image where all Python libraries (yfinance, apache-airflow-providers-postgres) are pre-installed, and the problematic multitasking library is pinned to a known-good version (0.0.11). This is the professional standard for creating reproducible and reliable containerized environments.
-
-This iterative process led to the final, robust architecture that successfully meets all project requirements.
+---
 
 ## Prerequisites
+
 Before you begin, ensure you have the following installed and running on your system:
 
- - Docker Desktop
+- **Docker Desktop**  
+- **A local installation of PostgreSQL Server**  
 
- - A local installation of PostgreSQL Server
+---
 
 ## Project Structure
+
 .
 ├── dags/
 │   ├── stock_dag.py             # Airflow DAG definition
