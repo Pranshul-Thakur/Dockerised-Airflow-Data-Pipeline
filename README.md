@@ -149,3 +149,11 @@ docker-compose up -d
 4. **Trigger a Run**: Click the Play button to start a manual run.
 
 5. **Check the Data**: After the run succeeds (turns green), connect to your local stockdb database and run `SELECT * FROM stock_prices;` to see the results.
+
+## Verification Screenshots
+
+### Airflow UI - DAG Running Successfully
+![Airflow DAG Status](images/airflow_ui.png)
+
+### Database Results - Stock Data Stored
+![Database Query Results](images/database_results.png)
