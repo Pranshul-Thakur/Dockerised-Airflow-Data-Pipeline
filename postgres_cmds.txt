@@ -1,0 +1,13 @@
+psql -U postgres
+
+
+CREATE DATABASE stockdb;
+CREATE USER stocks WITH ENCRYPTED PASSWORD 'stocks_pw';
+GRANT ALL PRIVILEGES ON DATABASE stockdb TO stocks;
+\c stockdb
+
+
+\i C:/Users/LENOVO/Desktop/8byte/postgres/init/001_create_table.sql
+
+
+\q
